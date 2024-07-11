@@ -1,7 +1,8 @@
-from threading import Thread
-from time import sleep
 import asyncio
+from time import sleep
+
 import pandas as pd
+
 from database import db
 
 host = 'localhost'
@@ -9,7 +10,7 @@ user = 'root'
 password = 'root'
 database = 'data'
 
-db = db(host, user, password, database)
+db = db()
 
 
 def validate_csv_file(data_frame):
@@ -22,7 +23,8 @@ def validate_csv_file(data_frame):
 def compress_image_waiting(n): sleep(n)
 
 
-def process_images(batch_id, data_frame):
+async def process_images(batch_id, data_frame):
+    await db.connect(host, user, password, database)
     print("thread started")
     output_images = list()
     counter = 0
@@ -30,8 +32,8 @@ def process_images(batch_id, data_frame):
         data = data.replace('\n', '').replace("image", "image-output").replace(',', ',\n')
 
         for item in data.split(',\n'):
-            db.save_process_image(batch_id, item)
-            db.update_no_of_processed(batch_id, counter)
+            await db.save_process_image(batch_id, item)
+            await db.update_no_of_processed(batch_id, counter)
             counter += 1
             compress_image_waiting(1000)
             print("image " + str(counter) + ' processing completed')
@@ -44,8 +46,6 @@ def process_images(batch_id, data_frame):
     print(data_frame)
 
 
-
-
 def process_csv(batch_id):
     data_frame = pd.read_csv('data_set.csv')
     if validate_csv_file(data_frame):
@@ -53,3 +53,11 @@ def process_csv(batch_id):
                 "data": data_frame}
     else:
         return {"response": {'status': 'error', 'message': 'Invalid file format.'}, "data": None}
+
+
+def sync_process_image(batch_id, data_frame):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(process_images(batch_id, data_frame))
+    loop.close()

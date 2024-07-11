@@ -1,11 +1,11 @@
 import os.path
+import uuid
 from threading import Thread
+
 from flask import Flask, request
 
 from database import db
-from helper import process_csv, process_images
-
-import uuid
+from helper import process_csv, sync_process_image
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = './'
@@ -16,24 +16,27 @@ user = 'root'
 password = 'root'
 database = 'data'
 
-db = db(host, user, password, database)
+db = db()
+
 
 
 # mysql = MySQL.
 
 
 @app.route('/status', methods=['GET'])
-def get_status():
+async def get_status():
     if request.method == 'GET':
+        await db.connect(host, user, password, database)
         batch_id = request.args.get('id')
-        return db.get_batch(batch_id)
+        return await db.get_batch(batch_id)
     else:
         return 'Invalid method.'
 
 
 @app.route('/upload/file', methods=['POST'])
-def upload_file():
+async def upload_file():
     if request.method == 'POST':
+        await db.connect(host, user, password, database)
         file = request.files['file']
         print("file name ", file.filename)
         if file.filename == '':
@@ -46,8 +49,8 @@ def upload_file():
                 batch_id = str(uuid.uuid4()).replace('-', '')
 
                 data = process_csv(batch_id)
-                if db.save_batch(batch_id) and data.get("response").get('status') == 'success':
-                    thread = Thread(target=process_images, args=(batch_id, data.get('data'), ))
+                if await db.save_batch(batch_id) and data.get("response").get('status') == 'success':
+                    thread = Thread(target=sync_process_image, args=(batch_id, data.get('data'), ))
                     thread.start()
                     return data.get("response")
                 else:
